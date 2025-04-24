@@ -37,7 +37,8 @@ const questions = [
   "Did you have collagen?"
 ];
 
-let reportRequested = false;  // Track if the report was requested
+let currentQuestionIndex = 0; // Track which question we're on
+let userQuestionsAnswered = {}; // Store whether user has answered all questions
 
 // Utility to load and save logs
 function loadLogs() {
@@ -138,13 +139,26 @@ app.post("/telegram/webhook", async (req, res) => {
 
     await sendTelegramMessage(userId, supplementLoggedMessage);
 
-    // Ask for personalized note
+    // Ask if they want to send a personalized note (directly after logging)
     await sendTelegramMessage(userId, "Would you like to send a personalized note to the other user?");
-    await sendTelegramMessage(userId, "Type your note and send it, or leave it blank.", getYesNoButtons());
+    await sendTelegramMessage(userId, "Type your note and send it, or leave it blank.");
 
     await sendTelegramMessage(otherUser, `🔔 ${userId === USER_A ? "Maksymilian" : "Sonya"} just took supplements.`);
 
     return res.sendStatus(200);
+  }
+
+  // Handling questions
+  if (callback && callback.data === "yes" || callback.data === "no") {
+    const userId = String(callback.from.id);
+
+    // Proceed to next question
+    if (currentQuestionIndex < questions.length) {
+      await sendTelegramMessage(userId, questions[currentQuestionIndex], getYesNoButtons());
+      currentQuestionIndex++;
+    } else {
+      await sendTelegramMessage(userId, "You have completed all questions.");
+    }
   }
 
   res.sendStatus(200);
