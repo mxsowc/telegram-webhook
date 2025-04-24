@@ -37,6 +37,8 @@ const questions = [
   "Did you have collagen?"
 ];
 
+let reportRequested = false;  // Track if the report was requested
+
 // Utility to load and save logs
 function loadLogs() {
   if (!fs.existsSync(DATA_FILE)) return {};
@@ -66,7 +68,6 @@ function getSupplementButtons() {
   return [
     [{ text: "Log Day Supplements", callback_data: "log_day_supplements" }],
     [{ text: "Log Evening Supplements", callback_data: "log_evening_supplements" }],
-    [{ text: "Get Report", callback_data: "get_report" }],
   ];
 }
 
@@ -125,27 +126,14 @@ app.post("/telegram/webhook", async (req, res) => {
       await sendTelegramMessage(userId, `✅ Evening Supplements logged: ${eveningSupplements.join(", ")}`);
     }
 
-    if (supplementType === "get_report") {
-      await sendTelegramMessage(userId, "Do you want your supplement report? Answer below:", getYesNoButtons());
-    }
-
-    if (supplementType === "yes") {
-      // Generate report
-      const reportFileName = generateReport(userId);
-      await sendTelegramMessage(userId, `Here is your report:`, {
-        reply_markup: { inline_keyboard: [[{ text: "Download Report", callback_data: reportFileName }]] },
-      });
-    }
-
-    if (supplementType === "no") {
-      await sendTelegramMessage(userId, "No report requested.");
-    }
-
-    // Ask Yes/No questions
-    if (questions.length > 0) {
-      const question = questions[0];
-      questions.shift();
-      await sendTelegramMessage(userId, question, getYesNoButtons());
+    // Ask Yes/No questions if report requested at the start
+    if (reportRequested) {
+      if (questions.length > 0) {
+        const question = questions.shift();  // Shift the first question
+        await sendTelegramMessage(userId, question, getYesNoButtons());
+      } else {
+        await sendTelegramMessage(userId, "You have completed all questions.");
+      }
     }
 
     return res.sendStatus(200);
