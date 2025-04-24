@@ -2,7 +2,6 @@ const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
 const cron = require("node-cron");
-const { writeFileSync } = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -67,6 +66,15 @@ function getSupplementButtons() {
   return [
     [{ text: "Log Day Supplements", callback_data: "log_day_supplements" }],
     [{ text: "Log Evening Supplements", callback_data: "log_evening_supplements" }],
+    [{ text: "Get Report", callback_data: "get_report" }],
+  ];
+}
+
+// Yes/No buttons for questions
+function getYesNoButtons() {
+  return [
+    [{ text: "Yes", callback_data: "yes" }],
+    [{ text: "No", callback_data: "no" }],
   ];
 }
 
@@ -75,9 +83,15 @@ app.post("/telegram/webhook", async (req, res) => {
   const message = req.body.message;
   const callback = req.body.callback_query;
 
-  // Handle /start
+  // Handle /start with a start button
   if (message?.text === "/start") {
-    await sendTelegramMessage(message.chat.id, "👋 Welcome! Tap below to log supplements:", getSupplementButtons());
+    await sendTelegramMessage(message.chat.id, "👋 Welcome! Tap below to start:", getSupplementButtons());
+    return res.sendStatus(200);
+  }
+
+  // Handle Start button click
+  if (callback && callback.data === "start") {
+    await sendTelegramMessage(callback.from.id, "💊 Choose a supplement to log:", getSupplementButtons());
     return res.sendStatus(200);
   }
 
@@ -111,12 +125,29 @@ app.post("/telegram/webhook", async (req, res) => {
       await sendTelegramMessage(userId, `✅ Evening Supplements logged: ${eveningSupplements.join(", ")}`);
     }
 
-    await sendTelegramMessage(userId, "⚙️ Would you like to answer the following questions?");
-    for (const question of questions) {
-      await sendTelegramMessage(userId, question);
+    if (supplementType === "get_report") {
+      await sendTelegramMessage(userId, "Do you want your supplement report? Answer below:", getYesNoButtons());
     }
 
-    await sendTelegramMessage(userId, "Once you answer, I will send a report.");
+    if (supplementType === "yes") {
+      // Generate report
+      const reportFileName = generateReport(userId);
+      await sendTelegramMessage(userId, `Here is your report:`, {
+        reply_markup: { inline_keyboard: [[{ text: "Download Report", callback_data: reportFileName }]] },
+      });
+    }
+
+    if (supplementType === "no") {
+      await sendTelegramMessage(userId, "No report requested.");
+    }
+
+    // Ask Yes/No questions
+    if (questions.length > 0) {
+      const question = questions[0];
+      questions.shift();
+      await sendTelegramMessage(userId, question, getYesNoButtons());
+    }
+
     return res.sendStatus(200);
   }
 
@@ -124,35 +155,28 @@ app.post("/telegram/webhook", async (req, res) => {
 });
 
 // Function to generate report
-function generateReport() {
+function generateReport(userId) {
   const logs = loadLogs();
-  let report = "📋 Supplements Log Report\n\n";
+  let report = `📋 Supplements Log Report for ${userId}\n\n`;
 
   for (const date in logs) {
     report += `\nDate: ${date}\n`;
-    for (const userId in logs[date]) {
-      report += `User: ${userId}\nSupplements: ${logs[date][userId].join(", ")}\n\n`;
+    for (const user in logs[date]) {
+      report += `User: ${user}\nSupplements: ${logs[date][user].join(", ")}\n\n`;
     }
   }
 
   // Save the report as a file
-  const reportFileName = `report-${getToday()}.txt`;
-  writeFileSync(reportFileName, report);
+  const reportFileName = `report-${userId}-${getToday()}.txt`;
+  fs.writeFileSync(reportFileName, report);
   return reportFileName;
 }
-
-// Handle report request
-app.post("/report", (req, res) => {
-  const reportFileName = generateReport();
-  res.sendFile(reportFileName, { root: __dirname });
-});
 
 // Health check route (for testing Render)
 app.get("/", (_, res) => res.send("✅ Bot is live"));
 
 app.listen(PORT, () => {
   console.log(`🚀 Telegram bot running on port ${PORT}`);
-
   cron.schedule("0 8 * * *", () => {
     sendTelegramMessage(USER_A, "🌞 Good morning! Did you take your supplements?");
     sendTelegramMessage(USER_B, "🌞 Good morning! Did you take your supplements?");
