@@ -64,22 +64,6 @@ function sendTelegramMessage(chatId, text, keyboard = null) {
   return axios.post(`${TELEGRAM_API}/sendMessage`, payload);
 }
 
-// Build supplement buttons (including day and evening supplements)
-function getSupplementButtons() {
-  return [
-    [{ text: "Log Day Supplements", callback_data: "log_day_supplements" }],
-    [{ text: "Log Evening Supplements", callback_data: "log_evening_supplements" }],
-  ];
-}
-
-// Yes/No buttons for questions
-function getYesNoButtons() {
-  return [
-    [{ text: "Yes", callback_data: "yes" }],
-    [{ text: "No", callback_data: "no" }],
-  ];
-}
-
 // Webhook handler
 app.post("/telegram/webhook", async (req, res) => {
   const message = req.body.message;
@@ -144,17 +128,13 @@ app.post("/telegram/webhook", async (req, res) => {
     await sendTelegramMessage(userId, "Would you like to send a personalized note to the other user?");
     await sendTelegramMessage(userId, "Type your note and send it, or leave it blank.");
 
-    // Confirmation to the user
-    await sendTelegramMessage(userId, "Your supplement log has been sent to the other user with your message.");
-
     return res.sendStatus(200);
   }
 
-  // Handling questions
-  if (callback && callback.data === "yes" || callback.data === "no") {
+  // Handling questions (Black seed oil, Creatine, Collagen)
+  if (callback && (callback.data === "yes" || callback.data === "no")) {
     const userId = String(callback.from.id);
 
-    // Proceed to next question
     if (currentQuestionIndex < questions.length) {
       await sendTelegramMessage(userId, questions[currentQuestionIndex], getYesNoButtons());
       currentQuestionIndex++;
