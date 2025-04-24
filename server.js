@@ -1,54 +1,48 @@
-require("dotenv").config();
 const express = require("express");
-const bodyParser = require("body-parser");
 const axios = require("axios");
+require("dotenv").config();
 
 const app = express();
-app.use(bodyParser.json());
+const PORT = process.env.PORT || 3001;
 
-// 🔐 Telegram bot token
-const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN || "7697941059:AAHAtUFxMSKtB3NQgAVwBK3f7wB8iFdY1dw";
+// ✅ CORS fix: allow frontend to communicate with backend
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // you can restrict later to http://localhost:3000
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 
-// 👥 Telegram user chat IDs
-const USER_A_CHAT_ID = "7052003301"; // Maksymilian
-const USER_B_CHAT_ID = "818290223";  // Second person
+app.use(express.json());
 
-// 📬 Telegram webhook handler
+// Replace with your actual Telegram user IDs
+const USER_A = "7052003301";
+const USER_B = "818290223";
+
+app.post("/notify", (req, res) => {
+  const { sender, supplement } = req.body;
+
+  const receiver = sender === "A" ? USER_B : USER_A;
+  const message = `🧠 ${sender === "A" ? "Maksymilian" : "User B"} just took ${supplement} 💊`;
+
+  console.log("Sending to Telegram:", message);
+
+  axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+    chat_id: receiver,
+    text: message,
+  }).then(() => {
+    res.sendStatus(200);
+  }).catch((error) => {
+    console.error("Telegram send error:", error.message);
+    res.sendStatus(500);
+  });
+});
+
+// Telegram webhook endpoint (optional)
 app.post("/telegram/webhook", (req, res) => {
-  const message = req.body.message;
-
-  if (message && message.chat) {
-    const chatId = message.chat.id;
-    const text = message.text;
-    console.log(`📩 Message from ${chatId}: ${text}`);
-  }
-
   res.sendStatus(200);
 });
 
-// 🔔 Notification handler from React app
-app.post("/notify", async (req, res) => {
-  const { sender, supplement } = req.body;
-
-  const toChatId = sender === "A" ? USER_B_CHAT_ID : USER_A_CHAT_ID;
-  const fromName = sender === "A" ? "Maksymilian" : "Partner";
-
-  const message = `${fromName} just took ${supplement} 💊`;
-
-  try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      chat_id: toChatId,
-      text: message,
-    });
-    console.log(`✅ Sent message to ${toChatId}`);
-    res.send({ success: true });
-  } catch (error) {
-    console.error("❌ Failed to send message:", error.response?.data || error.message);
-    res.status(500).send({ error: error.message });
-  }
-});
-
-const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Webhook server is running on port ${PORT}`);
 });
