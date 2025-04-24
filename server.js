@@ -177,12 +177,14 @@ app.get("/", (_, res) => res.send("✅ Bot is live"));
 
 app.listen(PORT, () => {
   console.log(`🚀 Telegram bot running on port ${PORT}`);
-  cron.schedule("0 8 * * *", () => {
-    sendTelegramMessage(USER_A, "🌞 Good morning! Did you take your supplements?");
-    sendTelegramMessage(USER_B, "🌞 Good morning! Did you take your supplements?");
+
+  // Set reminders at 13:30 for day supplements and 21:00 for evening supplements
+  cron.schedule("30 13 * * *", () => {
+    sendTelegramMessage(USER_A, "🌞 Good afternoon! Did you take your supplements?");
+    sendTelegramMessage(USER_B, "🌞 Good afternoon! Did you take your supplements?");
   });
 
-  cron.schedule("0 20 * * *", () => {
+  cron.schedule("0 21 * * *", () => {
     sendTelegramMessage(USER_A, "🌙 Evening check-in: Did you take your supplements?");
     sendTelegramMessage(USER_B, "🌙 Evening check-in: Did you take your supplements?");
   });
