@@ -1,46 +1,50 @@
-// server.js
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
 const cron = require("node-cron");
-const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Use lowdb
-const adapter = new JSONFile("logs.json");
-const db = new Low(adapter);
+app.use(express.json());
 
-async function loadLogs() {
-  await db.read();
-  db.data ||= {};
-  return db.data;
+const USER_A = "7052003301"; // Maksymilian
+const USER_B = "818290223"; // Second user
+
+const DATA_FILE = "./logs.json";
+
+function loadLogs() {
+  if (!fs.existsSync(DATA_FILE)) return {};
+  return JSON.parse(fs.readFileSync(DATA_FILE));
 }
 
-async function saveLogs(data) {
-  db.data = data;
-  await db.write();
+function saveLogs(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
 function getToday() {
   return new Date().toISOString().split("T")[0];
 }
 
-function sendTelegramMessage(chatId, text, replyMarkup = null) {
+function sendTelegramMessage(chatId, text, options = {}) {
   return axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
     chat_id: chatId,
     text,
-    reply_markup: replyMarkup,
+    ...options,
   });
 }
 
-const USER_A = "7052003301"; // Maksymilian
-const USER_B = "818290223"; // Second user
+function sendSupplementMenu(chatId) {
+  const supplements = ["Vitamin D", "Magnesium", "Omega-3", "Zinc"];
+  const keyboard = supplements.map((s) => [{ text: s, callback_data: s }]);
 
-// Handle Telegram Webhook
-app.use(express.json());
+  return sendTelegramMessage(chatId, "💊 Select a supplement to log:", {
+    reply_markup: {
+      inline_keyboard: keyboard,
+    },
+  });
+}
 
 app.post("/telegram/webhook", async (req, res) => {
   const message = req.body.message;
@@ -50,76 +54,70 @@ app.post("/telegram/webhook", async (req, res) => {
     const userId = String(callback.from.id);
     const supplement = callback.data;
     const today = getToday();
-    const logs = await loadLogs();
+    const logs = loadLogs();
+
     if (!logs[today]) logs[today] = {};
     if (!logs[today][userId]) logs[today][userId] = [];
+
     if (!logs[today][userId].includes(supplement)) {
       logs[today][userId].push(supplement);
-      await saveLogs(logs);
+      saveLogs(logs);
     }
+
     const senderName = userId === USER_A ? "Maksymilian" : "User B";
     const otherUser = userId === USER_A ? USER_B : USER_A;
 
-    await sendTelegramMessage(userId, `✅ Logged: ${supplement}`);
+    await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerCallbackQuery`, {
+      callback_query_id: callback.id,
+      text: `✅ Logged: ${supplement}`,
+    });
+
     await sendTelegramMessage(otherUser, `🔔 ${senderName} just took ${supplement} 💊`);
     return res.sendStatus(200);
   }
 
-  if (!message || !message.text) return res.sendStatus(200);
-  const userId = String(message.from.id);
-  const username = message.from.first_name;
-  const text = message.text.trim();
+  if (message) {
+    const userId = String(message.from.id);
+    const text = message.text.trim();
 
-  const logs = await loadLogs();
-  const today = getToday();
-  if (!logs[today]) logs[today] = {};
+    if (text === "/start") {
+      await sendTelegramMessage(userId, "👋 Welcome! Click below to log your supplements:", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "Log Supplement", callback_data: "menu" }]],
+        },
+      });
+      return res.sendStatus(200);
+    }
 
-  if (text === "/start") {
-    const replyMarkup = {
-      inline_keyboard: [
-        [
-          { text: "Vitamin D", callback_data: "Vitamin D" },
-          { text: "Magnesium", callback_data: "Magnesium" },
-        ],
-        [
-          { text: "Omega-3", callback_data: "Omega-3" },
-          { text: "Zinc", callback_data: "Zinc" },
-        ],
-      ],
-    };
-    await sendTelegramMessage(userId, `👋 Hello ${username}! Click to log your supplement:`, replyMarkup);
-    return res.sendStatus(200);
+    if (text === "/status") {
+      const today = getToday();
+      const logs = loadLogs();
+      const supplements = logs[today]?.[userId] || [];
+      const msg = supplements.length
+        ? `📋 Today's supplements: ${supplements.join(", ")}`
+        : `❌ No supplements logged today`;
+      await sendTelegramMessage(userId, msg);
+      return res.sendStatus(200);
+    }
   }
 
-  if (text === "/status") {
-    const supplements = logs[today][userId] || [];
-    const msg = supplements.length
-      ? `📋 Today's supplements: ${supplements.join(", ")}`
-      : `❌ No supplements logged today`;
-    await sendTelegramMessage(userId, msg);
-    return res.sendStatus(200);
-  }
-
-  await sendTelegramMessage(userId, `👋 Hello ${username}! Use /start to see buttons or /status to check.`);
   res.sendStatus(200);
 });
 
-// Health check
 app.post("/notify", (req, res) => {
-  res.send("✅ Server running.");
+  res.send("✅ Server is running.");
 });
 
-// Start server and schedule reminders
+cron.schedule("0 8 * * *", () => {
+  sendTelegramMessage(USER_A, "🌞 Morning reminder! Did you take your supplements?");
+  sendTelegramMessage(USER_B, "🌞 Morning reminder! Did you take your supplements?");
+});
+
+cron.schedule("0 20 * * *", () => {
+  sendTelegramMessage(USER_A, "🌙 Evening reminder! Did you take your supplements?");
+  sendTelegramMessage(USER_B, "🌙 Evening reminder! Did you take your supplements?");
+});
+
 app.listen(PORT, () => {
-  console.log(`🚀 Telegram bot running on port ${PORT}`);
-
-  cron.schedule("0 8 * * *", () => {
-    sendTelegramMessage(USER_A, "🌞 Good morning! Did you take your supplements?");
-    sendTelegramMessage(USER_B, "🌞 Good morning! Did you take your supplements?");
-  });
-
-  cron.schedule("0 20 * * *", () => {
-    sendTelegramMessage(USER_A, "🌙 Evening check-in: Did you take your supplements?");
-    sendTelegramMessage(USER_B, "🌙 Evening check-in: Did you take your supplements?");
-  });
+  console.log(`🚀 Telegram health bot is live on port ${PORT}`);
 });
