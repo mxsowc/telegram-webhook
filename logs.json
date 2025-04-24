@@ -1,0 +1,2 @@
+touch logs.json
+echo "{}" > logs.json
