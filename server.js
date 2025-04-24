@@ -10,7 +10,7 @@ const BOT_TOKEN = "7697941059:AAHAtUFxMSKtB3NQgAVwBK3f7wB8iFdY1dw";
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 const USER_A = "7052003301"; // Maksymilian
-const USER_B = "818290223"; // Second user
+const USER_B = "818290223"; // Sonya
 const DATA_FILE = "./logs.json";
 
 app.use(express.json());
@@ -25,7 +25,7 @@ const daySupplements = [
 ];
 
 const eveningSupplements = [
-  "Saw palmetto", // Only for User A
+  "Saw palmetto", // Only for USER_A
   "Zinc", 
   "DHA-500", 
   "Mushroom Complex"
@@ -106,6 +106,9 @@ app.post("/telegram/webhook", async (req, res) => {
     if (!logs[today]) logs[today] = {};
     if (!logs[today][userId]) logs[today][userId] = [];
 
+    let otherUser = null;
+    let supplementLoggedMessage = "";
+
     if (supplementType === "log_day_supplements") {
       daySupplements.forEach((supplement) => {
         if (!logs[today][userId].includes(supplement)) {
@@ -113,7 +116,7 @@ app.post("/telegram/webhook", async (req, res) => {
         }
       });
       saveLogs(logs);
-      await sendTelegramMessage(userId, `✅ All Day Supplements logged: ${daySupplements.join(", ")}`);
+      supplementLoggedMessage = `✅ All Day Supplements logged: ${daySupplements.join(", ")}`;
     }
 
     if (supplementType === "log_evening_supplements") {
@@ -123,18 +126,23 @@ app.post("/telegram/webhook", async (req, res) => {
         }
       });
       saveLogs(logs);
-      await sendTelegramMessage(userId, `✅ Evening Supplements logged: ${eveningSupplements.join(", ")}`);
+      supplementLoggedMessage = `✅ Evening Supplements logged: ${eveningSupplements.join(", ")}`;
     }
 
-    // Ask Yes/No questions if report requested at the start
-    if (reportRequested) {
-      if (questions.length > 0) {
-        const question = questions.shift();  // Shift the first question
-        await sendTelegramMessage(userId, question, getYesNoButtons());
-      } else {
-        await sendTelegramMessage(userId, "You have completed all questions.");
-      }
+    // Notify the other user
+    if (userId === USER_A) {
+      otherUser = USER_B;
+    } else {
+      otherUser = USER_A;
     }
+
+    await sendTelegramMessage(userId, supplementLoggedMessage);
+
+    // Ask for personalized note
+    await sendTelegramMessage(userId, "Would you like to send a personalized note to the other user?");
+    await sendTelegramMessage(userId, "Type your note and send it, or leave it blank.", getYesNoButtons());
+
+    await sendTelegramMessage(otherUser, `🔔 ${userId === USER_A ? "Maksymilian" : "Sonya"} just took supplements.`);
 
     return res.sendStatus(200);
   }
