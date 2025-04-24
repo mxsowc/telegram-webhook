@@ -137,13 +137,15 @@ app.post("/telegram/webhook", async (req, res) => {
       otherUser = USER_A;
     }
 
-    await sendTelegramMessage(userId, supplementLoggedMessage);
+    // Notify the other user with personalized message
+    await sendTelegramMessage(otherUser, `🔔 ${userId === USER_A ? "Maksymilian" : "Sonya"} just took supplements. Here's the log: ${supplementLoggedMessage}`);
 
     // Ask if they want to send a personalized note (directly after logging)
     await sendTelegramMessage(userId, "Would you like to send a personalized note to the other user?");
     await sendTelegramMessage(userId, "Type your note and send it, or leave it blank.");
 
-    await sendTelegramMessage(otherUser, `🔔 ${userId === USER_A ? "Maksymilian" : "Sonya"} just took supplements.`);
+    // Confirmation to the user
+    await sendTelegramMessage(userId, "Your supplement log has been sent to the other user with your message.");
 
     return res.sendStatus(200);
   }
@@ -158,6 +160,7 @@ app.post("/telegram/webhook", async (req, res) => {
       currentQuestionIndex++;
     } else {
       await sendTelegramMessage(userId, "You have completed all questions.");
+      currentQuestionIndex = 0; // Reset for next day
     }
   }
 
