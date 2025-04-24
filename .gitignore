@@ -1,0 +1,11 @@
+# dependencies
+/node_modules
+
+# environment
+.env
+
+# local data
+logs.json
+
+# OS files
+.DS_Store
